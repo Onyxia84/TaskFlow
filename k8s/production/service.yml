@@ -1,42 +1,32 @@
-# 1. SERVICE REDIS (ClusterIP = Interne uniquement)
+# --- SERVICE FRONTEND ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis-svc
-  namespace: taskflow-staging
+  name: frontend-svc
+  namespace: taskflow-production
 spec:
-  type: ClusterIP
+  type: NodePort # Obligatoire pour le niveau socle du TP
   selector:
-    app: taskflow-redis
+    app: taskflow-frontend # Doit être identique au label du deployment
   ports:
-    - port: 6379
-      targetPort: 6379
+    - protocol: TCP
+      port: 80         # Port exposé à l'intérieur du cluster
+      targetPort: 80   # Port dans le container (Dockerfile EXPOSE 80)
+      nodePort: 30080  # Port accessible sur l'IP de Minikube (entre 30000-32767)
+
 ---
-# 2. SERVICE BACKEND (ClusterIP = Interne, seul le frontend ou l'ingress lui parle)
+# --- SERVICE BACKEND ---
 apiVersion: v1
 kind: Service
 metadata:
   name: backend-svc
   namespace: taskflow-production
 spec:
-  type: ClusterIP 
-  selector:
-    app: taskflow-backend
-  ports:
-    - port: 3001
-      targetPort: 3001
----
-# 3. SERVICE FRONTEND (NodePort = Accessible de l'extérieur)
-apiVersion: v1
-kind: Service
-metadata:
-  name: frontend-svc
-  namespace: taskflow-staging
-spec:
   type: NodePort
   selector:
-    app: taskflow-frontend
+    app: taskflow-backend # Doit être identique au label du deployment
   ports:
-    - port: 80
-      targetPort: 80
-      nodePort: 30080 # Port à utiliser dans ton navigateur
+    - protocol: TCP
+      port: 3001       # Port exposé à l'intérieur du cluster
+      targetPort: 3001 # Port dans le container (vu dans app.js)
+      nodePort: 30001  # Port accessible sur l'IP de Minikube

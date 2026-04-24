@@ -1,38 +1,14 @@
-# 1. DEPLOYMENT REDIS (Cache)
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: taskflow-redis
-  namespace: taskflow-production
-spec:
-  replicas: 1 # Un seul redis suffit souvent, même en prod
-  selector:
-    matchLabels:
-      app: taskflow-redis
-  template:
-    metadata:
-      labels:
-        app: taskflow-redis
-    spec:
-      containers:
-        - name: redis
-          image: redis:7-alpine
-          ports:
-            - containerPort: 6379
----
-# 2. DEPLOYMENT BACKEND
+# --- DEPLOYMENT BACKEND ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: taskflow-backend
-  namespace: taskflow-staging
+  namespace: taskflow-production
+  labels:
+    app: taskflow-backend
+    tier: api
 spec:
-  replicas: 3 # 2 en staging, 3 en prod !
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-      maxSurge: 1
+  replicas: 3
   selector:
     matchLabels:
       app: taskflow-backend
@@ -42,24 +18,41 @@ spec:
         app: taskflow-backend
     spec:
       containers:
-        - name: backend
-          image: nginx:alpine # IMAGE TEMPORAIRE (ton binôme mettra la vraie)
-          ports:
-            - containerPort: 3001
-          envFrom:
-            - configMapRef:
-                name: taskflow-config
-            - secretRef:
-                name: taskflow-secret
+      - name: backend
+        image: miyxki/node:20-alpine
+        ports:
+        - containerPort: 3001
+        envFrom:
+        - configMapRef:
+            name: taskflow-config
+        - secretRef:
+            name: taskflow-secrets
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+
 ---
-# 3. DEPLOYMENT FRONTEND
+# --- DEPLOYMENT FRONTEND ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: taskflow-frontend
-  namespace: taskflow-staging
+  namespace: taskflow-production
+  labels:
+    app: taskflow-frontend
+    tier: web
 spec:
-  replicas: 3 # 2 en staging, 3 en prod !
+  replicas: 3
   selector:
     matchLabels:
       app: taskflow-frontend
@@ -69,7 +62,20 @@ spec:
         app: taskflow-frontend
     spec:
       containers:
-        - name: frontend
-          image: nginx:alpine # IMAGE TEMPORAIRE
-          ports:
-            - containerPort: 80
+      - name: frontend
+        image: miyxki/node:20-alpine
+        ports:
+        - containerPort: 80
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 3
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "128Mi"
+          requests:
+            cpu: "50m"
+            memory: "64Mi"
