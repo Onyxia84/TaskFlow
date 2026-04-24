@@ -1,6 +1,78 @@
 const API = window.API_URL || "http://localhost:3001";
 let allTasks = [];
 let currentFilter = "all";
+let token = localStorage.getItem("token") || null;
+
+// ============= AUTH FUNCTIONS =============
+async function login() {
+  const username = document.getElementById("auth-username").value.trim();
+  const password = document.getElementById("auth-password").value.trim();
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      document.getElementById("auth-error").textContent = data.error;
+      document.getElementById("auth-error").style.display = "block";
+      return;
+    }
+    token = data.token;
+    localStorage.setItem("token", token);
+    showApp();
+  } catch (e) {
+    console.error("Erreur login:", e);
+  }
+}
+
+async function register() {
+  const username = document.getElementById("auth-username").value.trim();
+  const password = document.getElementById("auth-password").value.trim();
+  try {
+    const res = await fetch(`${API}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      document.getElementById("auth-error").textContent = data.error;
+      document.getElementById("auth-error").style.display = "block";
+      return;
+    }
+    token = data.token;
+    localStorage.setItem("token", token);
+    showApp();
+  } catch (e) {
+    console.error("Erreur register:", e);
+  }
+}
+
+function logout() {
+  token = null;
+  localStorage.removeItem("token");
+  document.getElementById("auth-section").style.display = "block";
+  document.getElementById("app-section").style.display = "none";
+  document.getElementById("logout-btn").style.display = "none";
+}
+
+function showApp() {
+  document.getElementById("auth-section").style.display = "none";
+  document.getElementById("app-section").style.display = "block";
+  document.getElementById("logout-btn").style.display = "inline-block";
+  document.getElementById("auth-error").style.display = "none";
+  fetchHealth();
+  fetchTasks();
+}
+
+function authHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token}`
+  };
+}
 
 // ============= FETCH FUNCTIONS =============
 async function fetchHealth() {
@@ -21,7 +93,9 @@ async function fetchHealth() {
 
 async function fetchTasks() {
   try {
-    const response = await fetch(`${API}/tasks`);
+    const response = await fetch(`${API}/tasks`, {
+      headers: authHeaders()
+    });
     const data = await response.json();
     allTasks = data.tasks || [];
     renderBoard();
@@ -50,19 +124,21 @@ function renderBoard() {
   const inProgressTasks = filteredTasks.filter(t => t.status === "in-progress");
   const doneTasks = filteredTasks.filter(t => t.status === "done");
 
-  // Update counts
+  const completionRate = allTasks.length > 0
+    ? Math.round((allTasks.filter(t => t.status === "done").length / allTasks.length) * 100)
+    : 0;
+  document.getElementById("stat-completion").textContent = `${completionRate}%`;
+
   document.getElementById("count-todo").textContent = todoTasks.length;
   document.getElementById("count-inprogress").textContent = inProgressTasks.length;
   document.getElementById("count-done").textContent = doneTasks.length;
   document.getElementById("task-count").textContent = `${filteredTasks.length} tâche(s)`;
 
-  // Update stats (global, not filtered)
   document.getElementById("stat-todo").textContent = allTasks.filter(t => t.status === "todo").length;
   document.getElementById("stat-inprogress").textContent = allTasks.filter(t => t.status === "in-progress").length;
   document.getElementById("stat-done").textContent = allTasks.filter(t => t.status === "done").length;
   document.getElementById("stat-total").textContent = allTasks.length;
 
-  // Render columns
   document.getElementById("col-todo").innerHTML = todoTasks.map(createTaskCard).join("") || createEmptyState();
   document.getElementById("col-inprogress").innerHTML = inProgressTasks.map(createTaskCard).join("") || createEmptyState();
   document.getElementById("col-done").innerHTML = doneTasks.map(createTaskCard).join("") || createEmptyState();
@@ -116,7 +192,7 @@ async function addTask() {
   try {
     await fetch(`${API}/tasks`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({ title, description, priority })
     });
 
@@ -133,7 +209,7 @@ async function changeStatus(taskId, newStatus) {
   try {
     await fetch(`${API}/tasks/${taskId}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders(),
       body: JSON.stringify({ status: newStatus })
     });
     fetchTasks();
@@ -146,7 +222,10 @@ async function changeStatus(taskId, newStatus) {
 async function deleteTask(taskId) {
   if (confirm("Êtes-vous sûr de vouloir supprimer cette tâche ?")) {
     try {
-      await fetch(`${API}/tasks/${taskId}`, { method: "DELETE" });
+      await fetch(`${API}/tasks/${taskId}`, {
+        method: "DELETE",
+        headers: authHeaders()
+      });
       fetchTasks();
     } catch (error) {
       console.error("Erreur lors de la suppression:", error);
@@ -174,6 +253,9 @@ document.getElementById("input-title").addEventListener("keypress", (event) => {
 });
 
 // ============= INITIALIZATION =============
-fetchHealth();
-fetchTasks();
+if (token) {
+  showApp();
+} else {
+  fetchHealth();
+}
 setInterval(fetchHealth, 30000);
