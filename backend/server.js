@@ -1,13 +1,15 @@
-const http   = require("http");
-const redis  = require("redis");
+const http = require("http");
+const redis = require("redis");
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
 
 try { require("dotenv").config(); } catch { /* dotenv optionnel */ }
 
-const PORT        = process.env.PORT        || 3001;
-const APP_ENV     = process.env.APP_ENV     || "development";
+const PORT = process.env.PORT || 3001;
+const APP_ENV = process.env.APP_ENV || "development";
 const APP_VERSION = process.env.APP_VERSION || "1.0.0";
-const REDIS_URL   = process.env.REDIS_URL   || "redis://127.0.0.1:6379";
+const REDIS_URL = process.env.REDIS_URL || "redis://127.0.0.1:6379";
+const JWT_SECRET = process.env.JWT_SECRET || "taskflow_secret_key";
 
 const client = redis.createClient({ url: REDIS_URL });
 client.on("error", (err) => console.error("Redis error:", err.message));
@@ -31,17 +33,27 @@ function parseBody(req) {
 
 function json(res, status, data) {
   res.writeHead(status, {
-    "Content-Type":                "application/json; charset=utf-8",
+    "Content-Type": "application/json; charset=utf-8",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods":"GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers":"Content-Type",
-    "X-App-Version":               APP_VERSION,
-    "X-App-Env":                   APP_ENV,
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "X-App-Version": APP_VERSION,
+    "X-App-Env": APP_ENV,
   });
   res.end(JSON.stringify(data));
 }
 
-const VALID_STATUSES   = ["todo", "in-progress", "done"];
+function authMiddleware(req) {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader || !authHeader.startsWith("Bearer ")) return null;
+  try {
+    return jwt.verify(authHeader.split(" ")[1], JWT_SECRET);
+  } catch {
+    return null;
+  }
+}
+
+const VALID_STATUSES = ["todo", "in-progress", "done"];
 const VALID_PRIORITIES = ["low", "medium", "high"];
 
 // ── Logique tâches ───────────────────────────────────────────────────
@@ -53,13 +65,13 @@ async function getTasks() {
     keys.map(async (k) => {
       const t = await client.hGetAll(k);
       return {
-        id:          k.replace("task:", ""),
-        title:       t.title,
+        id: k.replace("task:", ""),
+        title: t.title,
         description: t.description || "",
-        status:      t.status      || "todo",
-        priority:    t.priority    || "medium",
-        createdAt:   t.createdAt,
-        updatedAt:   t.updatedAt   || t.createdAt,
+        status: t.status || "todo",
+        priority: t.priority || "medium",
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt || t.createdAt,
       };
     })
   );
@@ -77,15 +89,15 @@ async function createTask({ title, description, priority }) {
   if (priority && !VALID_PRIORITIES.includes(priority)) {
     throw new Error("Priorité invalide : low, medium ou high");
   }
-  const id  = genId();
+  const id = genId();
   const now = new Date().toISOString();
   await client.hSet(`task:${id}`, {
-    title:       title.trim(),
+    title: title.trim(),
     description: description?.trim() || "",
-    status:      "todo",
-    priority:    priority || "medium",
-    createdAt:   now,
-    updatedAt:   now,
+    status: "todo",
+    priority: priority || "medium",
+    createdAt: now,
+    updatedAt: now,
   });
   await client.incr("stats:total_created");
   return { id, title: title.trim(), description: description?.trim() || "", status: "todo", priority: priority || "medium", createdAt: now };
@@ -94,13 +106,13 @@ async function createTask({ title, description, priority }) {
 async function updateTask(id, { title, description, status, priority }) {
   const exists = await client.exists(`task:${id}`);
   if (!exists) return null;
-  if (status   && !VALID_STATUSES.includes(status))   throw new Error("Statut invalide : todo, in-progress ou done");
+  if (status && !VALID_STATUSES.includes(status)) throw new Error("Statut invalide : todo, in-progress ou done");
   if (priority && !VALID_PRIORITIES.includes(priority)) throw new Error("Priorité invalide : low, medium ou high");
-  const now     = new Date().toISOString();
+  const now = new Date().toISOString();
   const updates = { updatedAt: now };
-  if (title       !== undefined) updates.title       = title.trim();
+  if (title !== undefined) updates.title = title.trim();
   if (description !== undefined) updates.description = description.trim();
-  if (status      !== undefined) {
+  if (status !== undefined) {
     updates.status = status;
     if (status === "done") await client.incr("stats:total_completed");
   }
@@ -119,9 +131,9 @@ async function deleteTask(id) {
 const server = http.createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     res.writeHead(204, {
-      "Access-Control-Allow-Origin":  "*",
+      "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization",
     });
     res.end();
     return;
@@ -131,18 +143,60 @@ const server = http.createServer(async (req, res) => {
 
   // GET /health
   if (req.method === "GET" && url === "/health") {
-    const totalCreated   = await client.get("stats:total_created").catch(() => "0");
+    const totalCreated = await client.get("stats:total_created").catch(() => "0");
     const totalCompleted = await client.get("stats:total_completed").catch(() => "0");
     json(res, 200, {
-      status:  "ok",
-      env:     APP_ENV,
+      status: "ok",
+      env: APP_ENV,
       version: APP_VERSION,
-      redis:   "connected",
+      redis: "connected",
       stats: {
-        totalCreated:   parseInt(totalCreated   || "0"),
+        totalCreated: parseInt(totalCreated || "0"),
         totalCompleted: parseInt(totalCompleted || "0"),
       },
     });
+    return;
+  }
+
+  // POST /auth/register
+  if (req.method === "POST" && url === "/auth/register") {
+    try {
+      const { username, password } = await parseBody(req);
+      if (!username || !password) {
+        json(res, 400, { error: "Username et password requis" });
+        return;
+      }
+      const exists = await client.get(`user:${username}`);
+      if (exists) {
+        json(res, 409, { error: "Utilisateur déjà existant" });
+        return;
+      }
+      await client.set(`user:${username}`, password);
+      const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "24h" });
+      json(res, 201, { token });
+    } catch (e) { json(res, 400, { error: e.message }); }
+    return;
+  }
+
+  // POST /auth/login
+  if (req.method === "POST" && url === "/auth/login") {
+    try {
+      const { username, password } = await parseBody(req);
+      const stored = await client.get(`user:${username}`);
+      if (!stored || stored !== password) {
+        json(res, 401, { error: "Identifiants incorrects" });
+        return;
+      }
+      const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: "24h" });
+      json(res, 200, { token });
+    } catch (e) { json(res, 400, { error: e.message }); }
+    return;
+  }
+
+  // Protection JWT pour les routes /tasks
+  const user = authMiddleware(req);
+  if (url.startsWith("/tasks") && !user) {
+    json(res, 401, { error: "Token manquant ou invalide" });
     return;
   }
 
@@ -181,6 +235,31 @@ const server = http.createServer(async (req, res) => {
     const deleted = await deleteTask(matchDel[1]);
     if (!deleted) { json(res, 404, { error: "Tâche introuvable" }); return; }
     json(res, 200, { message: "Tâche supprimée" });
+    return;
+  }
+
+  // GET /stats
+  if (req.method === "GET" && url === "/stats") {
+    const tasks = await getTasks();
+    const totalCreated = await client.get("stats:total_created").catch(() => "0");
+    const totalCompleted = await client.get("stats:total_completed").catch(() => "0");
+
+    const byStatus = {
+      todo: tasks.filter(t => t.status === "todo").length,
+      "in-progress": tasks.filter(t => t.status === "in-progress").length,
+      done: tasks.filter(t => t.status === "done").length,
+    };
+
+    const completionRate = tasks.length > 0
+      ? Math.round((byStatus.done / tasks.length) * 100)
+      : 0;
+
+    json(res, 200, {
+      totalCreated: parseInt(totalCreated || "0"),
+      totalCompleted: parseInt(totalCompleted || "0"),
+      byStatus,
+      completionRate: `${completionRate}%`,
+    });
     return;
   }
 

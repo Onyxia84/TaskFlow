@@ -13,12 +13,12 @@ function test(desc, fn) {
 
 function expect(val) {
   return {
-    toBe:            (exp) => { if (val !== exp) throw new Error(`Attendu "${exp}", reçu "${val}"`); },
-    toHaveLength:    (n)   => { if (val.length !== n) throw new Error(`Attendu longueur ${n}, reçu ${val.length}`); },
-    toMatch:         (re)  => { if (!re.test(val)) throw new Error(`"${val}" ne correspond pas à ${re}`); },
-    toBeGreaterThan: (n)   => { if (val <= n) throw new Error(`Attendu > ${n}, reçu ${val}`); },
-    toBeTruthy:      ()    => { if (!val) throw new Error("Attendu truthy, reçu falsy"); },
-    toBeFalsy:       ()    => { if (val)  throw new Error("Attendu falsy, reçu truthy"); },
+    toBe: (exp) => { if (val !== exp) throw new Error(`Attendu "${exp}", reçu "${val}"`); },
+    toHaveLength: (n) => { if (val.length !== n) throw new Error(`Attendu longueur ${n}, reçu ${val.length}`); },
+    toMatch: (re) => { if (!re.test(val)) throw new Error(`"${val}" ne correspond pas à ${re}`); },
+    toBeGreaterThan: (n) => { if (val <= n) throw new Error(`Attendu > ${n}, reçu ${val}`); },
+    toBeTruthy: () => { if (!val) throw new Error("Attendu truthy, reçu falsy"); },
+    toBeFalsy: () => { if (val) throw new Error("Attendu falsy, reçu truthy"); },
   };
 }
 
@@ -122,7 +122,7 @@ test("La priorité par défaut est medium", () => {
 
 test("Passer à done depuis in-progress doit incrémenter les stats", () => {
   const wasNotDone = "in-progress" !== "done";
-  const isNowDone  = "done" === "done";
+  const isNowDone = "done" === "done";
   expect(wasNotDone && isNowDone).toBeTruthy();
 });
 
@@ -136,5 +136,6 @@ test("Une date ISO a le bon format", () => {
 
 // ── Résultat ──────────────────────────────────────────────────────────
 console.log(`\n📊 ${passed} passés, ${failed} échoués\n`);
-if (failed > 0) { console.log("❌ Des tests ont échoué."); process.exit(1); }
+if (failed > 0) { console.log("❌ Des tests ont échoué."); }
 else { console.log("✅ Tous les tests passent.\n"); }
+setTimeout(() => process.exit(failed > 0 ? 1 : 0), 500);
