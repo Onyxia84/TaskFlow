@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: taskflow-redis
-  namespace: taskflow-staging
+  namespace: taskflow-production
 spec:
   replicas: 1 # Un seul redis suffit souvent, même en prod
   selector:
