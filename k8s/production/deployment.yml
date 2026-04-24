@@ -1,0 +1,75 @@
+# 1. DEPLOYMENT REDIS (Cache)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskflow-redis
+  namespace: taskflow-staging
+spec:
+  replicas: 1 # Un seul redis suffit souvent, même en prod
+  selector:
+    matchLabels:
+      app: taskflow-redis
+  template:
+    metadata:
+      labels:
+        app: taskflow-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+---
+# 2. DEPLOYMENT BACKEND
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskflow-backend
+  namespace: taskflow-staging
+spec:
+  replicas: 3 # 2 en staging, 3 en prod !
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: taskflow-backend
+  template:
+    metadata:
+      labels:
+        app: taskflow-backend
+    spec:
+      containers:
+        - name: backend
+          image: nginx:alpine # IMAGE TEMPORAIRE (ton binôme mettra la vraie)
+          ports:
+            - containerPort: 3001
+          envFrom:
+            - configMapRef:
+                name: taskflow-config
+            - secretRef:
+                name: taskflow-secret
+---
+# 3. DEPLOYMENT FRONTEND
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskflow-frontend
+  namespace: taskflow-staging
+spec:
+  replicas: 3 # 2 en staging, 3 en prod !
+  selector:
+    matchLabels:
+      app: taskflow-frontend
+  template:
+    metadata:
+      labels:
+        app: taskflow-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: nginx:alpine # IMAGE TEMPORAIRE
+          ports:
+            - containerPort: 80
