@@ -1,4 +1,4 @@
-# 1. SERVICE REDIS (ClusterIP = Interne uniquement)
+# --- SERVICE REDIS ---
 apiVersion: v1
 kind: Service
 metadata:
@@ -10,23 +10,23 @@ spec:
     app: taskflow-redis
   ports:
     - port: 6379
-      targetPort: 6379
 ---
-# 2. SERVICE BACKEND (ClusterIP = Interne, seul le frontend ou l'ingress lui parle)
+# --- SERVICE BACKEND ---
 apiVersion: v1
 kind: Service
 metadata:
   name: backend-svc
   namespace: taskflow-staging
 spec:
-  type: ClusterIP 
+  type: NodePort
   selector:
     app: taskflow-backend
   ports:
     - port: 3001
       targetPort: 3001
+      nodePort: 30002
 ---
-# 3. SERVICE FRONTEND (NodePort = Accessible de l'extérieur)
+# --- SERVICE FRONTEND ---
 apiVersion: v1
 kind: Service
 metadata:
@@ -39,4 +39,4 @@ spec:
   ports:
     - port: 80
       targetPort: 80
-      nodePort: 30080 # Port à utiliser dans ton navigateur
+      nodePort: 30082

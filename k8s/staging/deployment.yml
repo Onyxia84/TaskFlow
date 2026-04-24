@@ -1,3 +1,26 @@
+# --- REDIS ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskflow-redis
+  namespace: taskflow-staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: taskflow-redis
+  template:
+    metadata:
+      labels:
+        app: taskflow-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+---
+# --- BACKEND ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -15,11 +38,33 @@ spec:
     spec:
       containers:
       - name: backend
-        image: <PSEUDO_DOCKER_COLLEGUE>/taskflow-backend:latest # SON IMAGE
+        image: miyxki/taskflow-backend:v1.0.3
         ports:
-        - containerPort: 3001 # Il utilise le port 3001 d'après son code
+        - containerPort: 3001
         envFrom:
         - configMapRef:
             name: taskflow-config
         - secretRef:
             name: taskflow-secrets
+---
+# --- FRONTEND ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskflow-frontend
+  namespace: taskflow-staging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: taskflow-frontend
+  template:
+    metadata:
+      labels:
+        app: taskflow-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: miyxki/taskflow-frontend:v1.0.5
+        ports:
+        - containerPort: 80

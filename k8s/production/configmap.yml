@@ -4,14 +4,9 @@ metadata:
   name: taskflow-config
   namespace: taskflow-production
 data:
-  # Informations générales de l'app (affichées dans le badge de l'app.js)
   APP_ENV: "production"
-  APP_VERSION: "1.0.0"
-  
-  # Configuration du serveur Backend
   PORT: "3001"
-  
-  # Configuration de la connexion Redis (pour le backend)
-  # On utilise le nom du service Kubernetes de Redis
-  REDIS_HOST: "redis-svc" 
+  REDIS_HOST: "redis-svc"
   REDIS_PORT: "6379"
+  REDIS_URL: "redis://redis-svc:6379" # Ajoute cette ligne !
+

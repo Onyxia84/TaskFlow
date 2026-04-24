@@ -1,14 +1,38 @@
-# --- DEPLOYMENT BACKEND ---
+# --- REDIS ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskflow-redis
+  namespace: taskflow-production
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: taskflow-redis
+  template:
+    metadata:
+      labels:
+        app: taskflow-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+---
+# --- BACKEND ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: taskflow-backend
   namespace: taskflow-production
-  labels:
-    app: taskflow-backend
-    tier: api
 spec:
   replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: taskflow-backend
@@ -22,35 +46,24 @@ spec:
         image: miyxki/taskflow-backend:v1.0.3
         ports:
         - containerPort: 3001
+        readinessProbe:
+          tcpSocket:    # <--- ON UTILISE TCP AU LIEU DE HTTP
+            port: 3001
+          initialDelaySeconds: 15
+          periodSeconds: 10
         envFrom:
         - configMapRef:
             name: taskflow-config
         - secretRef:
             name: taskflow-secrets
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 3001
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        resources:
-          limits:
-            cpu: "500m"
-            memory: "256Mi"
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
 
 ---
-# --- DEPLOYMENT FRONTEND ---
+# --- FRONTEND ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: taskflow-frontend
   namespace: taskflow-production
-  labels:
-    app: taskflow-frontend
-    tier: web
 spec:
   replicas: 3
   selector:
@@ -63,19 +76,6 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: miyxki/node:20-alpine
+        image: miyxki/taskflow-frontend:v1.0.5
         ports:
         - containerPort: 80
-        readinessProbe:
-          httpGet:
-            path: /
-            port: 80
-          initialDelaySeconds: 3
-          periodSeconds: 10
-        resources:
-          limits:
-            cpu: "200m"
-            memory: "128Mi"
-          requests:
-            cpu: "50m"
-            memory: "64Mi"
