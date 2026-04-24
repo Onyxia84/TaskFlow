@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: miyxki/node:20-alpine
+        image: miyxki/taskflow-backend:v1.0.3
         ports:
         - containerPort: 3001
         envFrom:
